@@ -93,7 +93,7 @@ public class EstadisticasApiController {
     }
 
 
-    // ----------------------------------------------------
+   // ----------------------------------------------------
     // GET /estadisticas/canciones
     // ----------------------------------------------------
     @GetMapping("/estadisticas/canciones")
@@ -102,68 +102,34 @@ public class EstadisticasApiController {
             @RequestParam(required = false) String fechaFin
     ) {
 
-        // FECHAS
+        // 1. Lógica de Fechas
         LocalDateTime inicio = null;
         LocalDateTime fin = null;
-        boolean filtrar = fechaInicio != null && !fechaInicio.isEmpty()
-                       && fechaFin != null && !fechaFin.isEmpty();
+        boolean filtrar = false;
 
-        if (filtrar) {
+        if (fechaInicio != null && !fechaInicio.isEmpty() && fechaFin != null && !fechaFin.isEmpty()) {
             try {
                 inicio = LocalDate.parse(fechaInicio).atStartOfDay();
                 fin = LocalDate.parse(fechaFin).atTime(LocalTime.MAX);
-            } catch (Exception e) { filtrar = false; }
-        }
-
-        // IDS
-        Set<Integer> ids = new HashSet<>();
-        ids.addAll(reproduccionRepository.findAll()
-                .stream().map(ReproduccionDocument::getIdCancion).toList());
-        ids.addAll(valoracionRepository.findAll()
-                .stream().map(ValoracionDocument::getIdSong).toList());
-
-        Map<Integer, EstadisticaCancionDocument> mapa = new HashMap<>();
-
-        for (Integer id : ids) {
-            EstadisticaCancionDocument e = new EstadisticaCancionDocument();
-            e.setIdCancion(id);
-            e.setReproduccionesTotales(0L);
-            mapa.put(id, e);
-        }
-
-        // REPRODUCCIONES
-        for (Integer id : ids) {
-            Long rep;
-            if (filtrar) {
-                rep = reproduccionRepository.countByIdCancionAndFechaBetween(id, inicio, fin);
-            } else {
-                rep = reproduccionRepository.countByIdCancion(id);
-            }
-            mapa.get(id).setReproduccionesTotales(rep != null ? rep : 0L);
-        }
-
-        // VALORACIONES
-        for (ValoracionDocument v : valoracionRepository.findAll()) {
-            EstadisticaCancionDocument e = mapa.get(v.getIdSong());
-            if (e != null) {
-                e.setTotalValoraciones(e.getTotalValoraciones() + 1);
-                e.setValoracionMedia(e.getValoracionMedia() + v.getValoracion());
+                filtrar = true;
+            } catch (Exception e) {
+                filtrar = false;
             }
         }
 
-        // MEDIA
-        for (EstadisticaCancionDocument e : mapa.values()) {
-            if (e.getTotalValoraciones() > 0) {
-                e.setValoracionMedia(e.getValoracionMedia() / e.getTotalValoraciones());
-            }
-        }
+        // 2. Inicialización
+        Map<Integer, EstadisticaCancionDocument> mapa = inicializarMapaCanciones();
 
+        // 3. Cálculos delegados a métodos privados (Reduce complejidad)
+        calcularReproducciones(mapa, filtrar, inicio, fin);
+        calcularValoraciones(mapa);
+        calcularPromedios(mapa);
+
+        // 4. Ordenar y devolver
         List<EstadisticaCancionDocument> out = new ArrayList<>(mapa.values());
         out.sort(Comparator.comparing(EstadisticaCancionDocument::getIdCancion));
         return ResponseEntity.ok(out);
     }
-
-
     // ----------------------------------------------------
     // GET /estadisticas/canciones/{id}
     // ----------------------------------------------------
@@ -482,6 +448,59 @@ public class EstadisticasApiController {
             ));
             
         return ResponseEntity.ok(conteoPorCancion);
+    }
+
+    // -------------------------------------------------------------------------
+    // MÉTODOS PRIVADOS PARA REDUCIR COMPLEJIDAD COGNITIVA (SONARCLOUD FIX)
+    // -------------------------------------------------------------------------
+
+    private Map<Integer, EstadisticaCancionDocument> inicializarMapaCanciones() {
+        Set<Integer> ids = new HashSet<>();
+        ids.addAll(reproduccionRepository.findAll()
+                .stream().map(ReproduccionDocument::getIdCancion).toList());
+        ids.addAll(valoracionRepository.findAll()
+                .stream().map(ValoracionDocument::getIdSong).toList());
+
+        Map<Integer, EstadisticaCancionDocument> mapa = new HashMap<>();
+        for (Integer id : ids) {
+            EstadisticaCancionDocument e = new EstadisticaCancionDocument();
+            e.setIdCancion(id);
+            e.setReproduccionesTotales(0L);
+            e.setTotalValoraciones(0);      // Inicializar para evitar nulos
+            e.setValoracionMedia(0.0f);      // Inicializar para evitar nulos
+            mapa.put(id, e);
+        }
+        return mapa;
+    }
+
+    private void calcularReproducciones(Map<Integer, EstadisticaCancionDocument> mapa, boolean filtrar, LocalDateTime inicio, LocalDateTime fin) {
+        for (Integer id : mapa.keySet()) {
+            Long rep;
+            if (filtrar) {
+                rep = reproduccionRepository.countByIdCancionAndFechaBetween(id, inicio, fin);
+            } else {
+                rep = reproduccionRepository.countByIdCancion(id);
+            }
+            mapa.get(id).setReproduccionesTotales(rep != null ? rep : 0L);
+        }
+    }
+
+    private void calcularValoraciones(Map<Integer, EstadisticaCancionDocument> mapa) {
+        for (ValoracionDocument v : valoracionRepository.findAll()) {
+            EstadisticaCancionDocument e = mapa.get(v.getIdSong());
+            if (e != null) {
+                e.setTotalValoraciones(e.getTotalValoraciones() + 1);
+                e.setValoracionMedia(e.getValoracionMedia() + v.getValoracion());
+            }
+        }
+    }
+
+    private void calcularPromedios(Map<Integer, EstadisticaCancionDocument> mapa) {
+        for (EstadisticaCancionDocument e : mapa.values()) {
+            if (e.getTotalValoraciones() > 0) {
+                e.setValoracionMedia(e.getValoracionMedia() / e.getTotalValoraciones());
+            }
+        }
     }
 
 }
