@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.demo.dto.ReproduccionDTO;
 import com.example.demo.model.EstadisticaAlbumDocument;
 import com.example.demo.model.EstadisticaCancionDocument;
 import com.example.demo.model.ReproduccionDocument;
@@ -200,14 +201,26 @@ public class EstadisticasApiController {
         updaterService.actualizarReproduccionesTotalesAlbum(id);
         return ResponseEntity.ok().build();
     }
-    // ----------------------------------------------------
+   // ----------------------------------------------------
     // POST /reproducciones
     // ----------------------------------------------------
     @PostMapping("/reproducciones")
-    public ResponseEntity<ReproduccionDocument> postReproduccion(@RequestBody ReproduccionDocument reproduccion) {
+    public ResponseEntity<ReproduccionDocument> postReproduccion(@RequestBody ReproduccionDTO request) {
+        
+        // 1. Convertimos el DTO (datos externos) a Documento (base de datos)
+        ReproduccionDocument reproduccion = new ReproduccionDocument();
+        reproduccion.setIdCancion(request.getIdCancion());
+        reproduccion.setEmailUser(request.getEmailUser());
+        
+        // 2. Asignamos datos seguros de sistema
         reproduccion.setFecha(LocalDateTime.now());
+
+        // 3. Guardamos usando el Repositorio
         ReproduccionDocument guardado = reproduccionRepository.save(reproduccion);
+
+        // 4. Actualizamos estadísticas
         updaterService.actualizarEstadisticasPostReproduccion(guardado.getIdCancion());
+
         return new ResponseEntity<>(guardado, HttpStatus.CREATED);
     }
 
