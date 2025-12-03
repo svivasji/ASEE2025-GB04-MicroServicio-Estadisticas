@@ -201,30 +201,34 @@ public class EstadisticasApiController {
         updaterService.actualizarReproduccionesTotalesAlbum(id);
         return ResponseEntity.ok().build();
     }
-   // ----------------------------------------------------
+  // ----------------------------------------------------
     // POST /reproducciones
     // ----------------------------------------------------
     @PostMapping("/reproducciones")
-    public ResponseEntity<ReproduccionDocument> postReproduccion(@RequestBody ReproduccionDTO request) {
+    // CAMBIO AQUÍ: Ahora devolvemos <ReproduccionDTO> en lugar de <ReproduccionDocument>
+    public ResponseEntity<ReproduccionDTO> postReproduccion(@RequestBody ReproduccionDTO request) {
         
-        // 1. Convertimos el DTO (datos externos) a Documento (base de datos)
+        // 1. DTO -> Entidad
         ReproduccionDocument reproduccion = new ReproduccionDocument();
         reproduccion.setIdCancion(request.getIdCancion());
         reproduccion.setEmailUser(request.getEmailUser());
-        
-        // 2. Asignamos datos seguros de sistema
         reproduccion.setFecha(LocalDateTime.now());
 
-        // 3. Guardamos usando el Repositorio
+        // 2. Guardar en BD
         ReproduccionDocument guardado = reproduccionRepository.save(reproduccion);
 
-        // 4. Actualizamos estadísticas
+        // 3. Actualizar estadísticas
         updaterService.actualizarEstadisticasPostReproduccion(guardado.getIdCancion());
 
-        return new ResponseEntity<>(guardado, HttpStatus.CREATED);
+        // 4. Entidad -> DTO (Para devolverlo seguro al usuario)
+        ReproduccionDTO respuesta = new ReproduccionDTO();
+        respuesta.setId(guardado.getId());
+        respuesta.setIdCancion(guardado.getIdCancion());
+        respuesta.setEmailUser(guardado.getEmailUser());
+        respuesta.setFecha(guardado.getFecha());
+
+        return new ResponseEntity<>(respuesta, HttpStatus.CREATED);
     }
-
-
     // ----------------------------------------------------
     // POST /estadisticas/canciones/reproducciones
     // Obtiene las reproducciones individuales para una lista de IDs (con filtro opcional)
