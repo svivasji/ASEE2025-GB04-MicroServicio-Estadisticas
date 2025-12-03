@@ -151,8 +151,7 @@ public class EstadisticasApiController {
             .orElse(ResponseEntity.notFound().build());
     }
 
-
-    // ----------------------------------------------------
+// ----------------------------------------------------
     // GET /estadisticas/albumes
     // ----------------------------------------------------
     @GetMapping("/estadisticas/albumes")
@@ -160,71 +159,30 @@ public class EstadisticasApiController {
             @RequestParam(required = false) String fechaInicio,
             @RequestParam(required = false) String fechaFin) {
 
+        // 1. Preparar fechas
         LocalDateTime inicio = null;
         LocalDateTime fin = null;
-        boolean filtrar = fechaInicio != null && !fechaInicio.isEmpty()
-                       && fechaFin != null && !fechaFin.isEmpty();
+        boolean filtrar = false;
 
-        if (filtrar) {
+        if (fechaInicio != null && !fechaInicio.isEmpty() && fechaFin != null && !fechaFin.isEmpty()) {
             try {
                 inicio = LocalDate.parse(fechaInicio).atStartOfDay();
                 fin = LocalDate.parse(fechaFin).atTime(LocalTime.MAX);
-            } catch (Exception e) { filtrar = false; }
-        }
-
-        // ALBUMES ACTIVOS
-        Set<Integer> albumes = new HashSet<>();
-        for (Integer idSong : contenidoService.obtenerIdsCanciones()) {
-            Integer alb = contenidoService.obtenerIdAlbumPorCancion(idSong);
-            if (alb != null && alb > 0) albumes.add(alb);
-        }
-
-        Map<Integer, EstadisticaAlbumDocument> mapa = new HashMap<>();
-
-        for (Integer id : albumes) {
-            EstadisticaAlbumDocument e = new EstadisticaAlbumDocument();
-            e.setIdAlbum(id);
-            e.setReproduccionesTotales(0L);
-            mapa.put(id, e);
-        }
-
-        // VALORACIONES
-        for (ValoracionDocument v : valoracionRepository.findAll()) {
-            Integer alb = v.getIdAlbum();
-            if (alb == null) continue;
-
-            mapa.putIfAbsent(alb, new EstadisticaAlbumDocument());
-            EstadisticaAlbumDocument e = mapa.get(alb);
-
-            if (e.getIdAlbum() == null) e.setIdAlbum(alb);
-            e.setTotalValoraciones(e.getTotalValoraciones() + 1);
-            e.setValoracionMedia(e.getValoracionMedia() + v.getValoracion());
-        }
-
-        // REPRODUCCIONES
-        for (Integer idAlbum : mapa.keySet()) {
-            Long total = 0L;
-
-            for (Integer idCancion : contenidoService.obtenerIdsCancionesPorAlbum(idAlbum)) {
-                Long rep;
-                if (filtrar) {
-                    rep = reproduccionRepository.countByIdCancionAndFechaBetween(idCancion, inicio, fin);
-                } else {
-                    rep = reproduccionRepository.countByIdCancion(idCancion);
-                }
-                total += (rep != null ? rep : 0L);
-            }
-
-            mapa.get(idAlbum).setReproduccionesTotales(total);
-        }
-
-        // MEDIA VALORACIÓN
-        for (EstadisticaAlbumDocument e : mapa.values()) {
-            if (e.getTotalValoraciones() > 0) {
-                e.setValoracionMedia(e.getValoracionMedia() / e.getTotalValoraciones());
+                filtrar = true;
+            } catch (Exception e) {
+                filtrar = false;
             }
         }
 
+        // 2. Inicializar mapa con álbumes activos
+        Map<Integer, EstadisticaAlbumDocument> mapa = inicializarMapaAlbumes();
+
+        // 3. Procesar datos (delegando a métodos privados)
+        procesarValoracionesAlbumes(mapa);
+        procesarReproduccionesAlbumes(mapa, filtrar, inicio, fin);
+        calcularPromediosAlbumes(mapa);
+
+        // 4. Retornar lista
         return ResponseEntity.ok(new ArrayList<>(mapa.values()));
     }
 
@@ -497,6 +455,76 @@ public class EstadisticasApiController {
 
     private void calcularPromedios(Map<Integer, EstadisticaCancionDocument> mapa) {
         for (EstadisticaCancionDocument e : mapa.values()) {
+            if (e.getTotalValoraciones() > 0) {
+                e.setValoracionMedia(e.getValoracionMedia() / e.getTotalValoraciones());
+            }
+        }
+    }
+
+
+    // --- MÉTODOS PRIVADOS PARA REDUCIR COMPLEJIDAD EN ÁLBUMES ---
+
+    private Map<Integer, EstadisticaAlbumDocument> inicializarMapaAlbumes() {
+        Set<Integer> albumes = new HashSet<>();
+        // Obtener IDs de álbumes desde las canciones
+        for (Integer idSong : contenidoService.obtenerIdsCanciones()) {
+            Integer alb = contenidoService.obtenerIdAlbumPorCancion(idSong);
+            if (alb != null && alb > 0) albumes.add(alb);
+        }
+
+        Map<Integer, EstadisticaAlbumDocument> mapa = new HashMap<>();
+        for (Integer id : albumes) {
+            EstadisticaAlbumDocument e = new EstadisticaAlbumDocument();
+            e.setIdAlbum(id);
+            e.setReproduccionesTotales(0L);
+            e.setTotalValoraciones(0);
+            e.setValoracionMedia(0.0f);
+            mapa.put(id, e);
+        }
+        return mapa;
+    }
+
+    private void procesarValoracionesAlbumes(Map<Integer, EstadisticaAlbumDocument> mapa) {
+        for (ValoracionDocument v : valoracionRepository.findAll()) {
+            Integer alb = v.getIdAlbum();
+            if (alb == null) continue;
+
+            mapa.putIfAbsent(alb, new EstadisticaAlbumDocument());
+            EstadisticaAlbumDocument e = mapa.get(alb);
+
+            // Asegurar inicialización si el álbum no estaba en la lista inicial
+            if (e.getIdAlbum() == null) {
+                e.setIdAlbum(alb);
+                e.setReproduccionesTotales(0L);
+                e.setTotalValoraciones(0);
+                e.setValoracionMedia(0.0f);
+            }
+
+            e.setTotalValoraciones(e.getTotalValoraciones() + 1);
+            e.setValoracionMedia(e.getValoracionMedia() + v.getValoracion());
+        }
+    }
+
+    private void procesarReproduccionesAlbumes(Map<Integer, EstadisticaAlbumDocument> mapa, 
+                                              boolean filtrar, LocalDateTime inicio, LocalDateTime fin) {
+        for (Integer idAlbum : mapa.keySet()) {
+            Long total = 0L;
+            // Este bucle anidado era el causante principal de la complejidad alta
+            for (Integer idCancion : contenidoService.obtenerIdsCancionesPorAlbum(idAlbum)) {
+                Long rep;
+                if (filtrar) {
+                    rep = reproduccionRepository.countByIdCancionAndFechaBetween(idCancion, inicio, fin);
+                } else {
+                    rep = reproduccionRepository.countByIdCancion(idCancion);
+                }
+                total += (rep != null ? rep : 0L);
+            }
+            mapa.get(idAlbum).setReproduccionesTotales(total);
+        }
+    }
+
+    private void calcularPromediosAlbumes(Map<Integer, EstadisticaAlbumDocument> mapa) {
+        for (EstadisticaAlbumDocument e : mapa.values()) {
             if (e.getTotalValoraciones() > 0) {
                 e.setValoracionMedia(e.getValoracionMedia() / e.getTotalValoraciones());
             }
