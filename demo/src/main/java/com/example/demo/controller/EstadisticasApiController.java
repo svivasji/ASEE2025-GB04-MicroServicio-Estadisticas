@@ -24,7 +24,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.example.demo.dto.ReproduccionDTO;
+import com.example.demo.dto.CompraDTO;
+import com.example.demo.dto.EstadisticasRequestDTO;
+import com.example.demo.dto.ReproduccionDTO; // <--- NUEVO
 import com.example.demo.model.EstadisticaAlbumDocument;
 import com.example.demo.model.EstadisticaCancionDocument;
 import com.example.demo.model.ReproduccionDocument;
@@ -229,73 +231,54 @@ public class EstadisticasApiController {
 
         return new ResponseEntity<>(respuesta, HttpStatus.CREATED);
     }
-    // ----------------------------------------------------
+  // ----------------------------------------------------
     // POST /estadisticas/canciones/reproducciones
-    // Obtiene las reproducciones individuales para una lista de IDs (con filtro opcional)
     // ----------------------------------------------------
     @Operation(
         summary = "Obtener reproducciones por lista de IDs",
         description = "Devuelve un mapa con las reproducciones de cada canción solicitada, filtradas por rango de fechas opcional."
     )
     @PostMapping("/estadisticas/canciones/reproducciones")
-    public ResponseEntity<Map<String, Long>> obtenerSumaReproducciones(@RequestBody Map<String, Object> request) {
-        
-        // 1. Extracción y CONVERSIÓN SEGURA de IDs
-        List<Object> idsBrutos = (List<Object>) request.get("ids");
-        
-        if (idsBrutos == null || idsBrutos.isEmpty()) {
+    public ResponseEntity<Map<String, Long>> obtenerSumaReproducciones(@RequestBody EstadisticasRequestDTO request) {
+
+        // 1. Validación limpia (Ya no hay casting manual)
+        if (request.getIds() == null || request.getIds().isEmpty()) {
             return ResponseEntity.ok(new HashMap<>());
         }
 
-        List<Integer> idsCanciones = idsBrutos.stream()
-            .map(idObj -> {
-                if (idObj instanceof Number) return ((Number) idObj).intValue();
-                try {
-                    return Integer.parseInt(String.valueOf(idObj));
-                } catch (NumberFormatException e) {
-                    return null; // Ignorar IDs inválidos
-                }
-            })
-            .filter(id -> id != null)
-            .collect(Collectors.toList());
-
-        // 2. Extracción y Parsing de Fechas
-        String fechaInicio = (String) request.get("fechaInicio");
-        String fechaFin = (String) request.get("fechaFin");
-
+        // 2. Lógica de Fechas (Extraemos directamente del DTO)
         LocalDateTime inicio = null;
         LocalDateTime fin = null;
-        boolean filtrarPorFecha = (fechaInicio != null && !fechaInicio.isEmpty() && 
-                                   fechaFin != null && !fechaFin.isEmpty());
+        boolean filtrarPorFecha = false;
 
-        if (filtrarPorFecha) {
+        if (request.getFechaInicio() != null && request.getFechaFin() != null) {
             try {
-                inicio = LocalDate.parse(fechaInicio).atStartOfDay();
-                fin = LocalDate.parse(fechaFin).atTime(LocalTime.MAX);
+                // Asumimos formato ISO (YYYY-MM-DD)
+                inicio = LocalDate.parse(request.getFechaInicio()).atStartOfDay();
+                fin = LocalDate.parse(request.getFechaFin()).atTime(LocalTime.MAX);
+                filtrarPorFecha = true;
             } catch (Exception e) {
-                System.err.println("Error parseando fechas en POST: " + e.getMessage());
-                filtrarPorFecha = false;
+                System.err.println("Error parseando fechas: " + e.getMessage());
+                // Si falla el parseo, simplemente no filtramos
             }
         }
 
-        // 3. Construir el Mapa de Respuesta (ID -> Plays)
+        // 3. Construir el Mapa de Respuesta
         Map<String, Long> resultado = new HashMap<>();
 
-        for (Integer idCancion : idsCanciones) {
+        for (Integer idCancion : request.getIds()) {
             long count;
             if (filtrarPorFecha) {
-                // Usamos el método filtrado (Devuelve 0 si no hay datos en esas fechas)
                 count = reproduccionRepository.countByIdCancionAndFechaBetween(idCancion, inicio, fin);
             } else {
-                // Usamos el total histórico
                 count = reproduccionRepository.countByIdCancion(idCancion);
             }
-            // Guardamos en el mapa: Clave="1", Valor=10
             resultado.put(String.valueOf(idCancion), count);
         }
         
         return ResponseEntity.ok(resultado);
     }
+    
     // ----------------------------------------------------
     // DELETE /estadisticas/canciones/{id}
     // ----------------------------------------------------
@@ -309,74 +292,44 @@ public class EstadisticasApiController {
     // ----------------------------------------------------
     // POST /estadisticas/compras/cancion
     // ----------------------------------------------------
-      @Operation(summary = "Registrar compra de canción", description = "Suma el precio indicado a los ingresos de la canción y de su álbum.")
+    @Operation(summary = "Registrar compra de canción", description = "Suma el precio indicado a los ingresos de la canción y de su álbum.")
     @PostMapping("/estadisticas/compras/cancion")
-    public ResponseEntity<Void> registrarCompraCancion(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<Void> registrarCompraCancion(@RequestBody CompraDTO request) {
         
-        // Extraer datos del JSON de forma segura
-        Integer idCancion = (Integer) request.get("idCancion");
-        
-        // Manejo seguro del precio (puede venir como Integer o Double en JSON)
-        Double precio = 0.0;
-        if (request.get("precio") instanceof Number) {
-            precio = ((Number) request.get("precio")).doubleValue();
-        }
-
-        if (idCancion == null || precio == null) {
+        // Validación directa
+        if (request.getIdCancion() == null || request.getPrecio() == null) {
             return ResponseEntity.badRequest().build();
         }
 
-        updaterService.registrarCompraCancion(idCancion, precio);
+        updaterService.registrarCompraCancion(request.getIdCancion(), request.getPrecio());
         
         return ResponseEntity.ok().build();
     }
-
 
     // ----------------------------------------------------
     // POST /estadisticas/compras/album
     // ----------------------------------------------------
-      @Operation(summary = "Registrar compra de álbum", description = "Suma el precio indicado a los ingresos del álbum.")
+    @Operation(summary = "Registrar compra de álbum", description = "Suma el precio indicado a los ingresos del álbum.")
     @PostMapping("/estadisticas/compras/album")
-    public ResponseEntity<Void> registrarCompraAlbum(@RequestBody Map<String, Object> request) {
-        
-        System.out.println(">>> DEBUG: Recibida petición compra ÁLBUM: " + request);
+    public ResponseEntity<Void> registrarCompraAlbum(@RequestBody CompraDTO request) {
 
-        // 1. Extracción segura del ID
-        Object idObj = request.get("idAlbum");
-        Integer idAlbum = null;
-        if (idObj instanceof Integer) {
-            idAlbum = (Integer) idObj;
-        } else if (idObj instanceof String) {
-            try { idAlbum = Integer.parseInt((String) idObj); } catch (Exception e) {}
-        }
-
-        // 2. Extracción segura del Precio
-        Object precioObj = request.get("precio");
-        Double precio = 0.0;
-        if (precioObj instanceof Number) {
-            precio = ((Number) precioObj).doubleValue();
-        } else if (precioObj instanceof String) {
-            try { precio = Double.parseDouble((String) precioObj); } catch (Exception e) {}
-        }
-
-        // 3. Validaciones
-        if (idAlbum == null) {
+        // Validación directa
+        if (request.getIdAlbum() == null) {
             System.err.println(">>> ERROR: idAlbum es NULL");
             return ResponseEntity.badRequest().build();
         }
-        if (precio == null || precio <= 0) {
-             System.err.println(">>> ERROR: Precio es 0 o inválido: " + precio);
-             // A veces esto no es error (si es gratis), pero para debug avisa
+
+        if (request.getPrecio() == null || request.getPrecio() <= 0) {
+             System.err.println(">>> ERROR: Precio inválido: " + request.getPrecio());
+             // Puedes decidir si retornar BadRequest o continuar
         }
 
-        System.out.println(">>> DEBUG: Llamando al servicio -> ID: " + idAlbum + " | Precio: " + precio);
+        System.out.println(">>> DEBUG: Servicio -> ID Album: " + request.getIdAlbum() + " | Precio: " + request.getPrecio());
 
-        // 4. Llamada al servicio
-        updaterService.registrarIngresoAlbum(idAlbum, precio);
+        updaterService.registrarIngresoAlbum(request.getIdAlbum(), request.getPrecio());
         
         return ResponseEntity.ok().build();
     }
-
     // ----------------------------------------------------
     // GET /api/canciones/artista/{email}
     // ----------------------------------------------------

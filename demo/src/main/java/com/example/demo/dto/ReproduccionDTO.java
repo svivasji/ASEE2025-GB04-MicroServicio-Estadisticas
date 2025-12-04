@@ -12,7 +12,10 @@ public class ReproduccionDTO {
     private String id;
     private LocalDateTime fecha;
 
-    public ReproduccionDTO() {}
+    // SOLUCIÓN: Añadir comentario explicativo dentro de las llaves
+    public ReproduccionDTO() {
+        // Constructor vacío necesario para la deserialización de JSON
+    }
 
     // Getters y Setters necesarios
     public Integer getIdCancion() { return idCancion; }

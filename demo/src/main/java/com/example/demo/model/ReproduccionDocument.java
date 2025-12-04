@@ -1,9 +1,9 @@
 package com.example.demo.model;
 
+import java.time.LocalDateTime;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-
-import java.time.LocalDateTime;
 
 @Document(collection = "reproducciones")
 public class ReproduccionDocument {
