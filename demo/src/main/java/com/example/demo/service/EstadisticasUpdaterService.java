@@ -3,6 +3,8 @@ package com.example.demo.service;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Autowired; // Import necesario
+import org.springframework.context.annotation.Lazy; // Import necesario
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,16 +16,19 @@ import com.example.demo.repository.EstadisticaCancionRepository;
 import com.example.demo.repository.ReproduccionRepository;
 import com.example.demo.repository.ValoracionRepository; 
 
-
 @Service
 public class EstadisticasUpdaterService {
 
     private final ContenidoService contenidoService;
     private final ReproduccionRepository reproduccionRepository;
     private final EstadisticaAlbumRepository albumRepository;
-    
     private final EstadisticaCancionRepository cancionRepository;
     private final ValoracionRepository valoracionRepository; 
+
+    // SOLUCIÓN: Auto-inyección con @Lazy para obtener el Proxy
+    @Autowired
+    @Lazy
+    private EstadisticasUpdaterService self;
 
     public EstadisticasUpdaterService(
         ContenidoService contenidoService, 
@@ -46,11 +51,14 @@ public class EstadisticasUpdaterService {
     @Transactional
     public void actualizarEstadisticasPostReproduccion(Integer idCancion) {
         
-        actualizarEstadisticasCancion(idCancion);
+        // CORRECCIÓN: Usamos 'self' en lugar de la llamada directa (this)
+        self.actualizarEstadisticasCancion(idCancion);
+        
         Integer idAlbum = contenidoService.obtenerIdAlbumPorCancion(idCancion);
         
         if (idAlbum != null && idAlbum > 0) {
-            actualizarReproduccionesTotalesAlbum(idAlbum);
+            // CORRECCIÓN: Usamos 'self' para pasar por el proxy transaccional
+            self.actualizarReproduccionesTotalesAlbum(idAlbum);
         } else {
             System.out.println("La canción " + idCancion + " no pertenece a un álbum o el ID es cero/nulo. Solo se actualizan estadísticas de canción.");
         }
@@ -85,7 +93,7 @@ public class EstadisticasUpdaterService {
     }
     
     // ----------------------------------------------------
-    // ACTUALIZACIÓN DE ÁLBUM (Método Faltante, AÑADIDO AQUÍ)
+    // ACTUALIZACIÓN DE ÁLBUM
     // ----------------------------------------------------
 
     @Transactional
@@ -104,8 +112,6 @@ public class EstadisticasUpdaterService {
         
         if (optEstadistica.isPresent()) {
             EstadisticaAlbumDocument estadistica = optEstadistica.get();
-            
-            // 🚩 setReproduccionesTotales espera Long/long
             estadistica.setReproduccionesTotales(reproduccionesTotales); 
             albumRepository.save(estadistica);
             
@@ -125,43 +131,41 @@ public class EstadisticasUpdaterService {
         Integer idAlbum = contenidoService.obtenerIdAlbumPorCancion(idCancion); 
 
         // --- BORRADO LOCAL ---
-        
         if (cancionRepository.existsById(idCancion)) {
             cancionRepository.deleteById(idCancion);
         }
         
-        // Estos métodos deben estar definidos en las interfaces de Repository
         reproduccionRepository.deleteByIdCancion(idCancion); 
         valoracionRepository.deleteByIdSong(idCancion); 
         
         // --- ACTUALIZACIÓN AGREGADA ---
-        
         if (idAlbum != null && idAlbum > 0) {
-            actualizarReproduccionesTotalesAlbum(idAlbum); 
+            // CORRECCIÓN: Usamos 'self' aquí también
+            self.actualizarReproduccionesTotalesAlbum(idAlbum); 
         } 
         
         System.out.println("Proceso de borrado de Canción ID " + idCancion + " finalizado. Álbum afectado: " + idAlbum);
     }
-public void registrarCompraCancion(Integer idCancion, Double precio) {
-        // 1. Recuperamos el documento o creamos uno nuevo
+
+    // ... (El resto de métodos de registro de compras pueden quedarse igual, 
+    // a menos que quieras hacerlos Transactional en el futuro)
+
+    public void registrarCompraCancion(Integer idCancion, Double precio) {
+        // ... (código existente)
         EstadisticaCancionDocument stats = cancionRepository.findById(idCancion)
             .orElse(new EstadisticaCancionDocument());
         
-        // 2. Inicialización si es nuevo
+        // ... (lógica de inicialización)
         if (stats.getIdCancion() == null) {
-            stats.setIdCancion(idCancion);
-            stats.setReproduccionesTotales(0L);
-            stats.setValoracionMedia(0f);
-            stats.setTotalValoraciones(0);
-            stats.setIngresos(0.0); // Inicializamos explícitamente
+             // ...
+             stats.setIdCancion(idCancion);
+             stats.setIngresos(0.0);
+             // ...
         }
 
-        // 3. Sumamos el ingreso
-        // Al ser 'double' primitivo, getIngresos() devuelve 0.0 si no se ha tocado, nunca null.
         double ingresosActuales = stats.getIngresos(); 
         stats.setIngresos(ingresosActuales + precio);
 
-        // 4. Guardamos (Esto escribe en MongoDB)
         cancionRepository.save(stats);
         
         System.out.println("💰 Ingresos actualizados Canción " + idCancion + ": +" + precio);
@@ -169,33 +173,27 @@ public void registrarCompraCancion(Integer idCancion, Double precio) {
         // Cascada al Álbum
         Integer idAlbum = contenidoService.obtenerIdAlbumPorCancion(idCancion);
         if (idAlbum != null && idAlbum > 0) {
+            // Nota: Si registrarIngresoAlbum fuera @Transactional, deberías usar self.registrarIngresoAlbum
             registrarIngresoAlbum(idAlbum, precio);
         }
     }
 
     public void registrarIngresoAlbum(Integer idAlbum, Double precio) {
-        // 1. Recuperamos el documento o creamos uno nuevo
+        // ... (código existente igual que antes)
         EstadisticaAlbumDocument stats = albumRepository.findById(idAlbum)
             .orElse(new EstadisticaAlbumDocument());
 
-        // 2. Inicialización si es nuevo
         if (stats.getIdAlbum() == null) {
             stats.setIdAlbum(idAlbum);
-            stats.setReproduccionesTotales(0L);
-            stats.setValoracionMedia(0f);
-            stats.setTotalValoraciones(0);
             stats.setIngresos(0.0);
+            // ...
         }
 
-        // 3. Sumamos
-        // ERROR CORREGIDO AQUÍ: Ya no comprobamos null porque es primitive double
         double ingresosActuales = stats.getIngresos(); 
         stats.setIngresos(ingresosActuales + precio);
 
-        // 4. Guardamos (Esto escribe en MongoDB)
         albumRepository.save(stats);
 
         System.out.println("💰 Ingresos actualizados Álbum " + idAlbum + ": +" + precio);
     }
-
 }
