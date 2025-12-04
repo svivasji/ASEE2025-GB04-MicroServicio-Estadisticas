@@ -2,6 +2,8 @@ package com.example.demo;
 
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
@@ -12,9 +14,13 @@ import com.example.demo.repository.EstadisticaCancionRepository;
 import com.example.demo.service.ContenidoService;
 import com.example.demo.service.EstadisticasUpdaterService;
 
+
+
 @Component
 public class DatabaseInitializer implements CommandLineRunner {
 
+    private static final Logger logger = LoggerFactory.getLogger(DatabaseInitializer.class);
+    
     private final ContenidoService contenidoService;
     private final EstadisticaCancionRepository cancionRepository;
     private final EstadisticaAlbumRepository albumRepository;
@@ -39,10 +45,10 @@ public class DatabaseInitializer implements CommandLineRunner {
         actualizarEstadisticasExistentes();
     }
     // ------------------------------------
-    // INICIALIZACIÓN DE CANCIONES (Lógica Idempotente Correcta)
+    // INICIALIZACIÓN DE CANCIONES
     // ------------------------------------
     private void inicializarEstadisticasCanciones() {
-        System.out.println("--- Inicializando Estadísticas de Canciones ---");
+        logger.info("--- Inicializando Estadísticas de Canciones ---");
 
         List<Integer> idsCanciones = contenidoService.obtenerIdsCanciones(); 
         
@@ -54,19 +60,20 @@ public class DatabaseInitializer implements CommandLineRunner {
                     nuevaEstadistica.setIdCancion(id);
                     
                     cancionRepository.save(nuevaEstadistica);
-                    System.out.println("Creada estadística inicial para canción ID: " + id);
+                    // Usamos {} como placeholder para mejorar el rendimiento
+                    logger.info("Creada estadística inicial para canción ID: {}", id);
                 }
             }
         } else {
-             System.out.println("No se encontraron IDs de canciones para inicializar.");
+             logger.info("No se encontraron IDs de canciones para inicializar.");
         }
     }
 
     // ------------------------------------
-    // INICIALIZACIÓN DE ÁLBUMES (Lógica Idempotente Correcta)
+    // INICIALIZACIÓN DE ÁLBUMES
     // ------------------------------------
     private void inicializarEstadisticasAlbumes() {
-        System.out.println("--- Inicializando Estadísticas de Álbumes ---");
+        logger.info("--- Inicializando Estadísticas de Álbumes ---");
 
         List<Integer> idsAlbumes = contenidoService.obtenerIdsAlbumes(); 
         
@@ -78,11 +85,11 @@ public class DatabaseInitializer implements CommandLineRunner {
                     nuevaEstadistica.setIdAlbum(id);
                     
                     albumRepository.save(nuevaEstadistica);
-                    System.out.println("Creada estadística inicial para álbum ID: " + id);
+                    logger.info("Creada estadística inicial para álbum ID: {}", id);
                 }
             }
         } else {
-             System.out.println("No se encontraron IDs de álbumes para inicializar.");
+             logger.info("No se encontraron IDs de álbumes para inicializar.");
         }
     }
     
@@ -90,7 +97,7 @@ public class DatabaseInitializer implements CommandLineRunner {
     // ACTUALIZACIÓN FORZADA DE ESTADÍSTICAS
     // ------------------------------------
     private void actualizarEstadisticasExistentes() {
-        System.out.println("--- Actualizando todas las estadísticas existentes ---");
+        logger.info("--- Actualizando todas las estadísticas existentes ---");
 
         List<Integer> idsCanciones = contenidoService.obtenerIdsCanciones();
         if (idsCanciones != null && !idsCanciones.isEmpty()) {
