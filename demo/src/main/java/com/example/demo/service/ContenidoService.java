@@ -124,14 +124,21 @@ public class ContenidoService {
     }
     
     public List<Integer> obtenerIdsCancionesPorArtista(String emailArtista) {
-        String url = CONTENIDO_BASE_URL + "/api/artistas/" + emailArtista + "/canciones";
-    
+        
+        // 1. CAMBIO DE SEGURIDAD:
+        // Usamos un placeholder {email} en lugar de concatenar el string directamente.
+        // Esto evita que el input del usuario altere la estructura de la URL.
+        String url = CONTENIDO_BASE_URL + "/api/artistas/{email}/canciones";
+
         try {
+            // 2. Pasamos 'emailArtista' como último argumento (varargs).
+            // RestTemplate se encarga de sanear y codificar la variable dentro de {email}.
             ResponseEntity<List<ExternalSongData>> response = restTemplate.exchange(
                 url, 
                 HttpMethod.GET, 
                 null, 
-                new ParameterizedTypeReference<List<ExternalSongData>>() {}
+                new ParameterizedTypeReference<List<ExternalSongData>>() {},
+                emailArtista // <--- La variable segura se inyecta aquí
             );
             
             return response.getBody() != null ? response.getBody().stream()
