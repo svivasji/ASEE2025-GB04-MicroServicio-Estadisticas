@@ -33,9 +33,14 @@ import jakarta.validation.Valid;
 @CrossOrigin(origins = "*")
 @Tag(name = "Valoraciones", description = "API para registrar y consultar valoraciones de canciones y álbumes")
 public class ValoracionesApiController {
+// 1. Declare the dependency as private final (immutable)
+    private final ValoracionRepository valoracionRepository;
 
-    @Autowired
-    private ValoracionRepository valoracionRepository;
+    // 2. Inject via Constructor
+    @Autowired 
+    public ValoracionesApiController(ValoracionRepository valoracionRepository) {
+        this.valoracionRepository = valoracionRepository;
+    }
     // aqui se guardan las valoraciones en la base de datos
     @PostMapping("/valoraciones")
     @Operation(summary = "Dejar valoración", description = "Permite a un usuario registrado valorar una canción o un álbum. Se debe proporcionar idSong o idAlbum, pero no ambos.")

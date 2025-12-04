@@ -3,9 +3,8 @@ package com.example.demo.service;
 import java.util.List;
 import java.util.Optional;
 
-import org.springframework.beans.factory.annotation.Autowired; // Import necesario
 import org.springframework.context.annotation.Lazy; // Import necesario
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Service; // Import necesario
 import org.springframework.transaction.annotation.Transactional;
 
 import com.example.demo.model.EstadisticaAlbumDocument;
@@ -26,24 +25,25 @@ public class EstadisticasUpdaterService {
     private final ValoracionRepository valoracionRepository; 
 
     // SOLUCIÓN: Auto-inyección con @Lazy para obtener el Proxy
-    @Autowired
-    @Lazy
-    private EstadisticasUpdaterService self;
+   // 1. Declaramos la auto-referencia como final
+    private final EstadisticasUpdaterService self;
 
     public EstadisticasUpdaterService(
         ContenidoService contenidoService, 
         ReproduccionRepository reproduccionRepository, 
         EstadisticaAlbumRepository albumRepository,
         EstadisticaCancionRepository cancionRepository, 
-        ValoracionRepository valoracionRepository 
+        ValoracionRepository valoracionRepository,
+        // 2. Inyectamos 'self' en el constructor con @Lazy para romper el ciclo infinito
+        @Lazy EstadisticasUpdaterService self 
     ) {
         this.contenidoService = contenidoService;
         this.reproduccionRepository = reproduccionRepository;
         this.albumRepository = albumRepository;
         this.cancionRepository = cancionRepository;
         this.valoracionRepository = valoracionRepository;
+        this.self = self;
     }
-
     // ----------------------------------------------------
     // LÓGICA POST-REPRODUCCIÓN
     // ----------------------------------------------------

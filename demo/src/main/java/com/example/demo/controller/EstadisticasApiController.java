@@ -48,12 +48,31 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @CrossOrigin(origins = "*")
 public class EstadisticasApiController {
 
-    @Autowired private ValoracionRepository valoracionRepository;
-    @Autowired private ReproduccionRepository reproduccionRepository;
-    @Autowired private EstadisticasUpdaterService updaterService;
-    @Autowired private EstadisticaCancionRepository estadisticaCancionRepository;
-    @Autowired private EstadisticaAlbumRepository estadisticaAlbumRepository;
-    @Autowired private ContenidoService contenidoService; 
+    // Al ser final, garantizamos que no cambien una vez creado el controlador.
+    private final ValoracionRepository valoracionRepository;
+    private final ReproduccionRepository reproduccionRepository;
+    private final EstadisticasUpdaterService updaterService;
+    private final EstadisticaCancionRepository estadisticaCancionRepository;
+    private final EstadisticaAlbumRepository estadisticaAlbumRepository;
+    private final ContenidoService contenidoService; 
+
+    // 2. Creamos el constructor para inyectar las dependencias
+    @Autowired // Opcional en Spring moderno si es el único constructor, pero bueno para claridad
+    public EstadisticasApiController(
+            ValoracionRepository valoracionRepository,
+            ReproduccionRepository reproduccionRepository,
+            EstadisticasUpdaterService updaterService,
+            EstadisticaCancionRepository estadisticaCancionRepository,
+            EstadisticaAlbumRepository estadisticaAlbumRepository,
+            ContenidoService contenidoService
+    ) {
+        this.valoracionRepository = valoracionRepository;
+        this.reproduccionRepository = reproduccionRepository;
+        this.updaterService = updaterService;
+        this.estadisticaCancionRepository = estadisticaCancionRepository;
+        this.estadisticaAlbumRepository = estadisticaAlbumRepository;
+        this.contenidoService = contenidoService;
+    }
 
 
     // ----------------------------------------------------
